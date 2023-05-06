@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import integrate
 from matplotlib import pyplot as plt
+import time as t_module
 
 class stellar_evol(object):
     '''
@@ -37,7 +38,7 @@ class stellar_evol(object):
     m1, m2 : float
         For Kroupa IMF, the inner boundary of the three part [Mo].
 
-        Default value: 0.5, 1
+        Default value: 0.08, 0.5
     
     sfh : list
         The shape of the list should be 2*n, the first column is time, and the second column is sfr [Mo].
@@ -70,6 +71,9 @@ class stellar_evol(object):
         self.sfh = np.array(sfh)
         self.lifetime = np.array(lifetime)
         self.yield_list = np.array(yield_list)
+
+        print('Star evolve stars')
+        start_time = t_module.time()
         
         # self.A is the normalization parameter of imf number
         self.A = self.norm_imf_n()
@@ -82,14 +86,15 @@ class stellar_evol(object):
         self.n_time_step = self.get_int(self.tend/self.dt)
 
         # self.star_num is the number evolution track of the stars in every stellar mass, only contain the alive stars.
-        self.star_num = np.zeros((self.n_mass_bin, self.n_time_step))
+        self.star_num = np.zeros((self.n_mass_bin+1, self.n_time_step))
         # self.star_mass is the mass evolution track of the stars in every stellar mass, only contain the alive stars.
-        self.star_mass = np.zeros((self.n_mass_bin, self.n_time_step))
+        self.star_mass = np.zeros((self.n_mass_bin+1, self.n_time_step))
         # self.rem_mass is the mass of stellar remnant of the stars in every stellar mass, do not contain the alive stars.
-        self.rem_mass = np.zeros((self.n_mass_bin, self.n_time_step))
+        self.rem_mass = np.zeros((self.n_mass_bin+1, self.n_time_step))
 
         # self.star is the list of the stellar mass of all stars. This is the masses of our stellar mass bin.
         self.star = np.arange(self.imf_bdys[0], self.imf_bdys[1], (self.imf_bdys[1]-self.imf_bdys[0])/self.n_mass_bin)
+        self.star = np.append(self.star, self.imf_bdys[-1])
         self.time = np.arange(0, tend, self.tend/self.n_time_step)
 
         # Interpolate the stellar lifetime to all stellar mass
@@ -103,10 +108,21 @@ class stellar_evol(object):
 
         # Interpolate the yield table to all stellar masses
         self.all_yield = np.interp(self.star, self.yield_list[:,0], self.yield_list[:,1]/self.yield_list[:,0])*self.star
-        self.star_yield = np.zeros((self.n_mass_bin, self.n_time_step))
+        self.__test_valid()
+        self.star_yield = np.zeros((self.n_mass_bin+1, self.n_time_step))
         
         for i, t in enumerate(self.time):
             self.__timestep(i)
+
+        end_time = t_module.time()
+        print('   Stars evolve completed - ' + str(round((end_time-start_time),2))+ ' s.')
+
+    def __test_valid(self):
+        for i_m,m in enumerate(self.star):
+            if self.all_yield[i_m] > m:
+                print('Something Wrong!!!!!')
+                print(m)
+                print(self.all_yield[i_m])
     
     def norm_imf_n(self):
         # normalize the IMF
@@ -114,7 +130,7 @@ class stellar_evol(object):
         return 1/imf_num[0]
     
     def norm_imf_m(self):
-        imf_m = integrate.quad(self.kroupa_imf_m, self.imf_bdys[0], self.imf_bdys[1])
+        imf_m = integrate.quad(self.kroupa_imf_m, self.imf_bdys[0], self.imf_bdys[1], limit = 50)
         return 1/imf_m[0]
 
     def kroupa_imf(self, m):
@@ -170,8 +186,8 @@ class stellar_evol(object):
         B_t = sfr*self.B
         # i_mass is the real stellar mass of every stellar mass bin
         for j in range(self.n_mass_bin):
-            i_num = B_t*self.kroupa_imf(self.star[j])*self.dm
-            i_mass = B_t*self.kroupa_imf_m(self.star[j])*self.dm
+            i_num = B_t*integrate.quad(self.kroupa_imf,self.star[j], self.star[j+1])[0]
+            i_mass = B_t*integrate.quad(self.kroupa_imf_m, self.star[j], self.star[j+1])[0]
             i_yield = i_num * self.all_yield[j]
             i_rem = i_mass - i_yield
             k = int(self.all_life_step[j])
@@ -179,10 +195,13 @@ class stellar_evol(object):
                 self.rem_mass[j,i_t+1:] += i_rem*np.ones(self.n_time_step-i_t-1)
                 self.star_yield[j,i_t+1:] += i_yield*np.ones(self.n_time_step-i_t-1)
             elif i_t+k < self.n_time_step:
-                self.star_num[j,i_t+1:i_t+k] += i_num*np.ones(k-1)
-                self.star_mass[j,i_t+1:i_t+k] += i_mass*np.ones(k-1)
+                self.star_num[j,i_t+1:i_t+k+1] += i_num*np.ones(k)
+                self.star_mass[j,i_t+1:i_t+k+1] += i_mass*np.ones(k)
                 self.star_yield[j, i_t+k+1:] += i_yield*np.ones(self.n_time_step-i_t-k-1)
                 self.rem_mass[j,i_t+k+1:] += i_rem*np.ones(self.n_time_step-i_t-k-1)
+                # print('Timestep: ' + str(i_t))
+                # print('Time: '+str(self.time[i_t])+ 'yr')
+                # print('Mass ' + str(self.star[j]))
             else:
                 self.star_num[j,i_t+1:] += i_num*np.ones(self.n_time_step-i_t-1)
                 self.star_mass[j,i_t+1:] += i_mass*np.ones(self.n_time_step-i_t-1)
@@ -240,3 +259,14 @@ class stellar_evol(object):
     def plot_t_stellar_mass(self, t, **kwargs):
         i_t = int(t/self.dt)
         plt.plot(self.star, self.star_mass[:,i_t], **kwargs)
+    
+    def print_alive_star(self, t):
+        i_t = int(t/self.dt)
+        print('Alive stellar mass at '+str(self.time[i_t])+' yr is : '+str(sum(self.star_mass[:,i_t]))+' Msun.')
+        return sum(self.star_mass[:,i_t])
+    
+    def print_inte_star(self, t):
+        i_t = int(t/self.dt)
+        print('Integrated stellar mass at '+str(self.time[i_t])+' yr is : '+str(sum(self.star_mass[:,i_t])+sum(self.rem_mass[:,i_t])+sum(self.star_yield[:,i_t]))+' Msun.')
+        return sum(self.star_mass[:,i_t])+sum(self.rem_mass[:,i_t])+sum(self.star_yield[:,i_t])
+
