@@ -64,13 +64,14 @@ class stellar_evol(object):
         self.imf_type = imf_type
         self.imf_bdys = imf_bdys
         self.__define_imf_param(alpha1, alpha2, alpha3, m1, m2) 
+        self.__define_imf(imf_type)
         self.sfh = np.array(sfh)
         self.lifetime = np.array(lifetime)
         self.yield_list = np.array(yield_list)
 
         print('Star evolve stars')
         start_time = t_module.time()
-        
+
         # self.A is the normalization parameter of imf number
         self.A = self.norm_imf_n()
         # self.B is the normalization parameter of imf mass
@@ -115,6 +116,14 @@ class stellar_evol(object):
         end_time = t_module.time()
         print('   Stars evolve completed - ' + str(round((end_time-start_time),2))+ ' s.')
 
+    def __define_imf(self, imf_type):
+        if 'kroupa' in imf_type:
+            self.imf = self.kroupa_imf
+            self.imf_m = self.kroupa_imf_m
+        elif 'chabrier' in imf_type:
+            self.imf = self.chabrier_imf
+            self.imf_m = self.chabrier_imf_m
+
     def __define_imf_param(self, alpha1, alpha2, alpha3, m1, m2):
         # Define some popular Kroupa type IMF here:
         if self.imf_type == 'kroupa93':
@@ -147,14 +156,49 @@ class stellar_evol(object):
     
     def norm_imf_n(self):
         # normalize the IMF
-        if self.imf_type == 'kroupa':
-            imf_num = integrate.quad(self.kroupa_imf, self.imf_bdys[0], self.imf_bdys[1])
-        return 1/imf_num[0]
+        inte_num = integrate.quad(self.imf, self.imf_bdys[0], self.imf_bdys[1])
+        return 1/inte_num[0]
     
     def norm_imf_m(self):
-        if self.imf_type == 'kroupa':
-            imf_m = integrate.quad(self.kroupa_imf_m, self.imf_bdys[0], self.imf_bdys[1], limit = 50)
-        return 1/imf_m[0]
+        inte_m = integrate.quad(self.imf_m, self.imf_bdys[0], self.imf_bdys[1])
+        return 1/inte_m[0]
+
+    def chabrier_imf(self, m):
+        '''
+        This is the definition of the Chabrier IMF number function. This function has not been normalized.
+
+        Input parameters:
+        m : the mass of stars, actually is the low limit of the mass bin.
+
+        Return:
+        n : the number of this mass in this mass bin.
+        '''
+
+        if m <= 1 and m >= self.imf_bdys[0]:
+            return 0.158*np.exp(-np.log10(m/0.079)**2/2/0.69**2)/m
+        elif m<= self.imf_bdys[1]:
+            return 4.43e-2*m**(-2.3)
+        else:
+            print('Out of boundary')
+            return 0
+
+    def chabrier_imf_m(self, m):
+        '''
+        This is the definition of the Chabrier IMF mass function. This function has not been normalized.
+
+        Input parameters:
+        m : the mass of stars, actually is the low limit of the mass bin.
+
+        Return:
+        m : the mass of stars in this mass bin.
+        '''
+        if m <= 1 and m >= self.imf_bdys[0]:
+            return 0.158*np.exp(-np.log10(m/0.792)**2/2/0.69**2)
+        elif m<= self.imf_bdys[1]:
+            return 4.43e-2*m**(-1.3)
+        else:
+            print('Out of boundary')
+            return 0
 
     def kroupa_imf(self, m):
         '''
@@ -206,10 +250,9 @@ class stellar_evol(object):
         '''
         num_list = []
         mass_list = []
-        if self.imf_type == 'kroupa':
-            for im in range(self.n_mass_bin):
-                num_list.append(self.B*integrate.quad(self.kroupa_imf, self.star[im], self.star[im+1])[0])
-                mass_list.append(self.B*integrate.quad(self.kroupa_imf_m, self.star[im], self.star[im+1])[0])
+        for im in range(self.n_mass_bin):
+            num_list.append(self.B*integrate.quad(self.imf, self.star[im], self.star[im+1])[0])
+            mass_list.append(self.B*integrate.quad(self.imf_m, self.star[im], self.star[im+1])[0])
         self.star_imf_num = np.array(num_list)
         self.star_imf_mass = np.array(mass_list)
             
@@ -288,7 +331,7 @@ class stellar_evol(object):
         mass = np.arange(self.imf_bdys[0], self.imf_bdys[1], self.dm)
         d_num = []
         for i_m in mass:
-            d_num.append(self.kroupa_imf(i_m))
+            d_num.append(self.imf(i_m))
         plt.plot(mass, d_num, **kwargs)
         plt.yscale('log')
         plt.xscale('log')
