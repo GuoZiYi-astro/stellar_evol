@@ -2,6 +2,9 @@ import numpy as np
 from scipy import integrate
 from matplotlib import pyplot as plt
 import time as t_module
+import os
+
+evol_path = os.path.dirname(os.path.realpath(__file__))
 
 class stellar_evol(object):
     '''
@@ -121,7 +124,7 @@ class stellar_evol(object):
         if len(self.yield_list) > 3:
             yield_list = self.yield_list
         else:
-            yield_list = np.loadtxt('lifes/schaller_1992.txt')
+            yield_list = np.loadtxt(os.path.join(evol_path, 'yields/K10_N13_CCSN_hypernova.txt'))
         self.all_yield = np.interp(self.star, yield_list[:,0], yield_list[:,1]/yield_list[:,0])*self.star
 
     def __cal_all_life(self):
@@ -129,7 +132,7 @@ class stellar_evol(object):
         if len(self.lifetime) > 3:
             lifetime = self.lifetime
         else:
-            lifetime = np.loadtxt('yields/K10_N13_CCSN_hypernova.txt')
+            lifetime = np.loadtxt(os.path.join(evol_path, 'lifes/schaller_1992.txt'))
         self.all_life = np.interp(self.star, lifetime[:,0], lifetime[:,1])
 
     def __define_imf(self, imf_type):
