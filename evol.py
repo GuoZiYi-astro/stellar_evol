@@ -96,8 +96,8 @@ class stellar_evol(object):
 
         self.__cal_star_num_list()
 
-        # Interpolate the stellar lifetime to all stellar mass
-        self.all_life = np.interp(self.star, self.lifetime[:,0], self.lifetime[:,1])
+        self.__cal_all_life()
+
         # Then calculate the timesteps of all stellar masses
         all_life_step = np.zeros(len(self.all_life))
         for i_life in range(len(self.all_life)):
@@ -105,8 +105,8 @@ class stellar_evol(object):
         self.all_life_step = np.array(all_life_step)
         self.all_sfr = np.interp(self.time, self.sfh[:,0], self.sfh[:,1])
 
-        # Interpolate the yield table to all stellar masses
-        self.all_yield = np.interp(self.star, self.yield_list[:,0], self.yield_list[:,1]/self.yield_list[:,0])*self.star
+        self.__cal_all_yield()
+
         self.__test_valid()
         self.star_yield = np.zeros((self.n_mass_bin+1, self.n_time_step))
         
@@ -115,6 +115,22 @@ class stellar_evol(object):
 
         end_time = t_module.time()
         print('   Stars evolve completed - ' + str(round((end_time-start_time),2))+ ' s.')
+
+    def __cal_all_yield(self):
+        # Interpolate the yield table to all stellar masses
+        if len(self.yield_list) > 3:
+            yield_list = self.yield_list
+        else:
+            yield_list = np.loadtxt('lifes/schaller_1992.txt')
+        self.all_yield = np.interp(self.star, yield_list[:,0], yield_list[:,1]/yield_list[:,0])*self.star
+
+    def __cal_all_life(self):
+        # Interpolate the stellar lifetime to all stellar mass
+        if len(self.lifetime) > 3:
+            lifetime = self.lifetime
+        else:
+            lifetime = np.loadtxt('yields/K10_N13_CCSN_hypernova.txt')
+        self.all_life = np.interp(self.star, lifetime[:,0], lifetime[:,1])
 
     def __define_imf(self, imf_type):
         if 'kroupa' in imf_type:
